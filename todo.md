@@ -14,32 +14,28 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[?]` needs your decisi
 - [x] Verify current Indian LLM / API availability (web)
 - [x] Literature novelty check (web)
 - [x] Write `PHASE0.md`
-- [?] **You confirm** Phase 0 + answer the open decisions in `PHASE0.md` §11
+- [x] Decisions answered (`PHASE0.md` §11)
+- [ ] **You:** ask your guide or department for GPU access or API funds. Take the pilot's cost-per-question number (Phase 1) with you
+- [?] **You confirm** → Phase 1 starts
 
-## Phase 1 — Setup + minimal fixes + Exp 1 (original MDAgents reproduction)
-- [ ] Clone MDAgents into `MDAgents/`, record the commit hash
-- [ ] Pin the env (Python ≥3.12, needed because `utils.py:454` uses a backslash inside an f-string expression)
-- [ ] **LLM adapter**: one `chat(model, messages, temperature)` function over the OpenAI-compatible API (`base_url` + key + model id from a small `models.yaml`). Replace every hard-coded model:
-  - [ ] `Agent.__init__/chat/temp_responses` (`utils.py:22,48-51,69-72`): `--model gpt-4` silently calls `gpt-4o-mini`
-  - [ ] complexity checker hard-coded `gpt-3.5` (`utils.py:246`)
-  - [ ] intermediate recruiter hard-coded `gpt-3.5` (`utils.py:286`)
-  - [ ] advanced recruiter + all MDT members hard-coded `gpt-4o-mini` (`utils.py:95,465`)
-- [ ] Log every call (model, prompt tokens, completion tokens, latency, role, stage) to a JSONL file. `total_api_calls` in `main.py:34` is never incremented
-- [ ] Global `--seed` (option shuffle `utils.py:235,266,335` is unseeded)
-- [ ] Data loaders → one common schema `{id, question, options{A..}, answer_idx, meta}`:
-  - [ ] MedQA US test (5-option = MDAgents paper setting; 4-option as a secondary setting)
-  - [ ] MedMCQA dev (labels public). Confirm split sizes on download
-- [ ] Fix `main.py:48`: results are only saved when dataset == medqa
-- [ ] Answer extractor (regex, then one LLM fallback) + scorer script: accuracy, macro-F1, per-complexity accuracy, calls, tokens, latency. The repo has **no** evaluation code
-- [ ] Record the known bugs **without fixing them yet** (fixes go in as a separate, flagged ablation so the baseline stays the original):
-  - [ ] `utils.py:525` advanced final decision reads only the initial-assessment report and ignores the other MDTs and FRDT
-  - [ ] `utils.py:401-413` if no agent speaks in round 1, `final_answer=None` goes to the moderator
-  - [ ] Paper says 3-shot for low complexity; code uses 5 (`utils.py:262`)
-- [ ] **Exp 1**: gpt-4o-mini, MedQA, adaptive + solo + fixed-intermediate + fixed-advanced. Compare against the paper's Table 5 (full MedQA with GPT-4o mini)
-- [ ] Sanity run: 10 questions end to end, then the full subset
+## Phase 1 — Code (no key needed) ✅ built 2026-09-25 · then Exp 1 when access arrives
+Code lives in `MDAgents/`. How to run: `MDAgents/RUN.md`. Upstream diff: `cd MDAgents && git diff`.
+- [x] Clone MDAgents (commit `3adbd760`, 2024-11-10); venv `.venv` (Python 3.14), deps pinned in `requirements.txt`
+- [x] **LLM adapter** `llm.py` + `models.json`: any OpenAI-compatible endpoint (Sarvam v2, OpenAI, OpenRouter, local vLLM/llama.cpp) + offline `mock` model. All hard-coded models removed (`utils.py` Agent, complexity checker, both recruiters, MDT members); upstream's gpt-3.5 roles → `--aux_model`
+- [x] Call log per LLM call (qid, model, role, tokens in/out, latency) → `output/calls/`
+- [x] Per-question seed (same option order in every run/shard); results written per question; resume after crash; `--shard i/N` parallel workers; per-question errors recorded, not fatal
+- [x] `prepare_data.py`: MedQA US test 5-opt (300), MedMCQA validation (500, stratified by subject), MedMCQA-Indic Hindi (same 500 ids); frozen ids in `data/subsets/`. Split sizes confirmed: train 182,822 / validation 4,183 / test 6,150
+- [x] `baselines.py`: zero-shot, CoT, CoT-SC(5) — MDAgents `--difficulty basic` is the few-shot single agent
+- [x] `evaluate.py`: accuracy, macro-F1, by complexity, unparsed %, errors, silent-agreement rate, finals-reached-moderator %, calls/tokens/sec/cost per question; `compare` = McNemar + bootstrap CI
+- [x] `smoke_test.sh` passes offline (mock model; all paths, Hindi, baselines, shards, resume); real client path tested against a fake local server
+- [x] Upstream bugs **logged, not fixed** (baseline stays upstream): `finals_collected` in trace (`utils.py:376-413`); complexity fallback flagged when checker names no level (upstream silently reused the previous answer)
+  - [ ] still to decide as a flagged ablation: `utils.py:525` advanced decision ignores other MDTs; 3-shot (paper) vs 5-shot (code)
+- [ ] **Waiting on access** — any ONE unlocks the pilot: Sarvam key (+ V2 whitelisting), OpenAI key, OpenRouter key, or a GPU (RTX 6000)
+- [ ] Pilot: 20 MedMCQA questions → real calls/tokens/₹ per question (`RUN.md` §3)
+- [ ] **Exp 1** (needs OpenAI key): gpt-4o-mini `--aux_model gpt-3.5-turbo`, MedQA 300, adaptive + forced levels; compare to paper Table 5 (83.6%). No OpenAI key ever → report as a limitation
 
 ## Phase 2 — Exp 2: Indian LLM + MedQA
-- [ ] Add the Indian model(s) chosen in PHASE0 §11 to `models.yaml`
+- [ ] Indian model = whichever access arrives: `sarvam-105b` (API) or `sarvam-30b-local` (GPU); twin control `nemotron-nano-*`
 - [ ] Single-agent baselines on the same questions: zero-shot, few-shot, CoT, CoT-SC (self-consistency)
 - [ ] MDAgents adaptive + each fixed complexity level
 - [ ] Record the complexity-routing distribution and whether any output fails to parse (format robustness)
@@ -50,7 +46,6 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[?]` needs your decisi
 - [ ] Same conditions as Phase 2
 - [ ] Per-subject accuracy; accuracy by routed complexity; MedQA-vs-MedMCQA gap
 - [ ] Also run the Western backbone (gpt-4o-mini) on MedMCQA so the comparison is backbone × dataset
-- [ ] (stretch, only if RQ3 needs it) PubMedQA / DDXPlus
 
 ## Phase 4 — Exp 4: + Catfish Agent (one change)
 - [ ] Silent-agreement rate = share of intermediate cases where no agent chose to speak (`num_yes==0` in round 1). Measure it on the Phase 3 logs **first**; if it's already low, Catfish has nothing to fix
@@ -59,7 +54,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[?]` needs your decisi
 
 ## Phase 5 — Exp 5: Hindi input via IndicTrans2 (translate → reason)
 - [ ] Hindi subset, same IDs as the English one. Source per PHASE0 §11.5: `ekacare/MedMCQA-Indic` `hi` (check the licence first) or our own IndicTrans2 En→Hi. Save it; never regenerate silently
-- [ ] Translation quality check: back-translate Hi→En, chrF/BLEU against the original English, plus a manual check of ~50 items (medical terms, negations, numbers)
+- [ ] Check the MedMCQA-Indic licence (empty on HF). If it's unclear, contact Eka Care
+- [ ] Translation quality check: back-translate Hi→En with IndicTrans2, chrF/BLEU against the original English, plus a ~50-item check by a Hindi reader (not medical: fluency and meaning; medical-term errors are flagged by comparing against the English)
 - [ ] Pipeline: Hindi → IndicTrans2 Hi→En → MDAgents (English)
 - [ ] Metrics: accuracy drop vs English; correlation between translation quality and correctness
 

@@ -63,7 +63,7 @@ Headline result: **83.6% on the full MedQA 5-option test set with GPT-4o-mini**.
 - **Paper ≠ code:**
   - The paper says 3-shot for basic cases; the code uses 5 (`:262`).
   - The advanced path's final decision reads **only the initial-assessment team** and ignores the others (`:525`).
-  - If no agent speaks in round 1, the moderator gets `final_answer=None` (`:401-413`).
+  - **The debate often never reaches the moderator** (`:376-413`). Each agent's final answer is collected only if **all 5 turns** of a round had at least one speaker. If any turn is silent, the loop exits first. When that happens in round 1, the moderator receives `final_answer=None` and effectively answers alone. Catfish reports that MDAgents is "silent" in most intermediate cases, so this is probably the common path.
 - **Needs Python ≥ 3.12**, because `:454` puts a backslash inside an f-string expression.
 
 **Policy:** Exp 1 runs the code **as released** (only the model routing changes), so it's a true reproduction. Bug fixes run later as a separate, labelled ablation.
@@ -72,9 +72,9 @@ Headline result: **83.6% on the full MedQA 5-option test set with GPT-4o-mini**.
 
 | Path | Calls |
 |---|---|
-| Basic | ~9 |
-| Advanced | ~30 |
-| Intermediate | 26 at minimum, up to several hundred if agents keep talking |
+| Basic | ~7 (+2 for the complexity check) |
+| Advanced | ~36 |
+| Intermediate | 26 if silent, ~40 brief, ~88 if a full round completes |
 
 Chat history also grows with every turn, so tokens grow faster than calls.
 
@@ -113,7 +113,8 @@ Why it matters:
 What MedMCQA is **not**:
 - It is **not real-patient data**. It is exam MCQs.
 - It is **not clinical validation**.
-- Its official README table and the paper label the 4,183 and 6,150 splits differently, so we confirm the split sizes on download (todo.md, Phase 1).
+- Split sizes confirmed on download: train 182,822 · validation (dev, NEET-PG, labels public) 4,183 · test (AIIMS, labels hidden) 6,150.
+- **Subset caveat:** proportional stratification makes **Dental 32%** (158/500) of our subset, and gold answers are skewed (**A = 35%**, D = 16%), so "always A" scores ~35%, not 25%. Report both.
 
 ## 5. Where Indian LLMs fit
 
@@ -236,18 +237,42 @@ Statistics: paired McNemar tests and bootstrap 95% CIs. No claim of improvement 
 - Benchmark accuracy ≠ clinical validity. This goes in the Limitations section.
 - Log every model ID, date, seed, prompt and subset ID file so any run can be repeated.
 
-## 11. Open decisions (you pick, then Phase 1 starts)
+## 11. Decisions (answered 2026-09-25)
 
-1. **Backbone:** Sarvam-105B via API as primary, and Krutrim dropped? *(recommended: yes)*
-2. **Budget:** what can you spend on the Sarvam API (and OpenAI for gpt-4o-mini)? The intermediate path can reach hundreds of calls per question, so the pilot measures real cost first.
-3. **Subset size:** pilot 20 → main **N = 300–500 per dataset**, the same IDs for every condition? *(recommended: 500 MedMCQA stratified by subject, 300 MedQA)*
-4. **GPU access** for self-hosted Sarvam-30B (roughly 1×80 GB in bf16, or about 32 GB with FP8)? If there's none, we stay API-only and note it as a limitation.
-5. **Hindi source:** `ekacare/MedMCQA-Indic` (translated by Llama-4-Maverick, not IndicTrans2, which avoids an IndicTrans2-on-its-own-output round trip; its **licence field is empty**, so we need to check that first) **or** our own IndicTrans2 en→hi? *(recommended: MedMCQA-Indic if the licence is OK)*
-6. **Hindi reviewer:** can someone who is medically literate and reads Hindi check about 50 translated items?
-7. **Sarvam thinking mode:** pin `reasoning_effort=low` (the default) for all runs? *(recommended: yes, and report it)*
-8. **Scope cuts:** skip PubMedQA/DDXPlus and TeamMedAgents unless the results call for them? *(recommended: skip)*
+| # | Decision | Answer | Consequence |
+|---|---|---|---|
+| 1 | Backbone | **Pluggable** (updated 2026-09-25: no API key or GPU confirmed yet). Sarvam-105B API *or* Sarvam-30B on a local GPU, whichever arrives first; twin control Nemotron-3-Nano-30B. Krutrim dropped | Code is model-agnostic (`MDAgents/models.json`) |
+| 2 | Budget | **Free credits only (₹100)** + **ask the institute** for GPU or API funds | ⚠️ Blocks everything past the pilot. Phase 1 builds the code and runs a ~20-question pilot on free credits to measure the real cost per question, which becomes the number to take to the guide or department |
+| 3 | Subset size | **500 MedMCQA** (stratified by subject) / **300 MedQA** | Same IDs in every condition |
+| 4 | GPU | **Unsure** (RTX 6000 possible) | If it arrives: Sarvam-30B + Nemotron locally at ₹0 (commands in `MDAgents/RUN.md`) |
+| 5 | Hindi source | **`ekacare/MedMCQA-Indic` (`hi`)** | Check the licence before use; if it's unclear, contact Eka Care |
+| 6 | Hindi reviewer | **Hindi reader, not medical** | Reviewer checks fluency and meaning; medical-term errors are flagged by back-translation plus the English original, and the limitation is stated |
+| 7 | Thinking mode | **`reasoning_effort=low`**, pinned (default, not asked) | Logged for every run |
+| 8 | Scope | **PubMedQA/DDXPlus cut.** TeamMedAgents stays conditional (Phase 7). **gpt-4o-mini stays** as the Western reference | RQ3 = MedQA vs MedMCQA only; the OpenAI cost is part of decision 2 |
 
 ---
+
+## 12. Cost estimate (modelled 2026-09-25; the pilot replaces it)
+
+A token model that follows `utils.py` call by call, with today's prices (₹96/$; gpt-4o-mini $0.15/$0.60, gpt-3.5 $0.50/$1.50, Sarvam-105B ₹29.28/₹73.20 per 1M tokens).
+
+It rests on these assumptions:
+
+| Assumption | Value |
+|---|---|
+| Output length per call type | fixed per type (see the model) |
+| Intermediate debate outcome | 60% silent / 30% brief / 10% full round |
+| Complexity routing (basic / intermediate / advanced) | MedQA 30/50/20, MedMCQA 50/40/10 |
+| Sarvam hidden reasoning ("thinking") | +250 output tokens per call |
+| Hindi input tokens | ×1.3 vs English |
+| Buffer for reruns | +25% |
+
+| Plan | gpt-4o-mini (Exp 1 + Western ref) | Sarvam-105B API (everything Indian) |
+|---|---|---|
+| Full (every condition at 300/500) | ₹2.2k ($23) | **₹18.9k** (₹14.6k with thinking off) |
+| Lean (forced-complexity + ablations on 200) | ₹1.9k ($19) | **₹11.4k** (₹8.8k with thinking off) |
+
+Alternatives: Sarvam-30B on free Kaggle costs ₹0 but needs ~220–900 GPU-hours, which is 7–30 weeks of a ~30 h/week quota. Sarvam-M on Featherless is a flat $25/month.
 
 ## References
 

@@ -1,0 +1,13 @@
+{
+  "mock":                  {"mock": true},
+  "gpt-4o-mini":           {"base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY", "model": "gpt-4o-mini",
+                            "price_in": 0.15, "price_out": 0.60, "currency": "USD"},
+  "gpt-3.5-turbo":         {"base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY", "model": "gpt-3.5-turbo",
+                            "price_in": 0.50, "price_out": 1.50, "currency": "USD"},
+  "sarvam-105b":           {"base_url": "https://api.sarvam.ai/v2", "api_key_env": "SARVAM_API_KEY", "model": "sarvam-105b",
+                            "extra": {"reasoning_effort": "low"}, "price_in": 29.28, "price_out": 73.20, "currency": "INR"},
+  "sarvam-30b-local":      {"base_url": "http://localhost:8000/v1", "model": "sarvam-30b"},
+  "nemotron-nano-local":   {"base_url": "http://localhost:8001/v1", "model": "nemotron-3-nano"},
+  "nemotron-nano-openrouter": {"base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY",
+                            "model": "nvidia/nemotron-3-nano-30b-a3b", "price_in": 0.05, "price_out": 0.20, "currency": "USD"}
+}
